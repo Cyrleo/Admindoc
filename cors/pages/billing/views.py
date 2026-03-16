@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import os
+from typing import Any, cast
 
 import stripe
 from django.utils.dateparse import parse_datetime
@@ -29,8 +30,13 @@ class CreateCheckoutSessionView(APIView):
             )
 
         stripe.api_key = secret_key
-        payload = dict(serializer.validated_data)
+        payload = cast(dict[str, Any], serializer.validated_data)
         subscription, _ = Subscription.objects.get_or_create(user=request.user)
+
+        price_id = str(payload.get("price_id", ""))
+        success_url = str(payload.get("success_url", ""))
+        cancel_url = str(payload.get("cancel_url", ""))
+        plan = str(payload.get("plan", ""))
 
         customer_id = subscription.stripe_customer_id
         if not customer_id:
@@ -42,12 +48,12 @@ class CreateCheckoutSessionView(APIView):
         session = stripe.checkout.Session.create(
             mode="subscription",
             customer=customer_id,
-            line_items=[{"price": payload["price_id"], "quantity": 1}],
-            success_url=payload["success_url"],
-            cancel_url=payload["cancel_url"],
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=success_url,
+            cancel_url=cancel_url,
             metadata={
                 "user_id": str(request.user.pk),
-                "plan": payload.get("plan", ""),
+                "plan": plan,
             },
         )
 

@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-7*$%1x0n_czl6oyoet%^lkv(_m+b44yl@o5%4ky609qjxliek3
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG')
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost 127.0.0.1').split()
 
 
 # Application definition
@@ -200,7 +200,11 @@ DJOSER = {
         for uri in os.getenv('DJOSER_SOCIAL_AUTH_ALLOWED_REDIRECT_URIS', '').split(',')
         if uri.strip()
     ],
-    'SERIALIZERS': {},
+    'SERIALIZERS': {
+        'user': 'accounts.serializers.UserSerializer',
+        'current_user': 'accounts.serializers.UserSerializer',
+        'user_create': 'accounts.serializers.UserCreateSerializer',
+    },
 }
 
 

@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
-from cors.models import AuditLog, Document
+from cors.models import AuditLog, Document, DocumentFile
 from .filters import DocumentFilter
 from .serializers import DocumentLocalUploadSerializer, DocumentSerializer
 
@@ -129,15 +129,35 @@ class DocumentViewSet(viewsets.ModelViewSet):
         responses={
             200: OpenApiResponse(
                 response=OpenApiTypes.OBJECT,
-                description="Returns a temporary download URL for the document.",
+                description="Returns a temporary download URL for the document's primary file or all files.",
             )
         }
     )
     @action(detail=True, methods=["get"], url_path="download")
     def download(self, request, pk=None):
+        """
+        Download document file(s).
+        Returns the primary file by default, or all files if no primary is set.
+        For backward compatibility, also checks the deprecated 'file' field.
+        """
         document = self.get_object()
-
-        if not document.file:
+        
+        # Try to get files from the new DocumentFile model
+        document_files = document.files.all()
+        
+        if document_files.exists():
+            # Get primary file or first file
+            primary_file = document_files.filter(is_primary=True).first()
+            if not primary_file:
+                primary_file = document_files.first()
+            
+            file_obj = primary_file.file
+            file_name = primary_file.file_name
+        elif document.file:
+            # Backward compatibility: use deprecated file field
+            file_obj = document.file
+            file_name = document.file_name or document.file.name
+        else:
             return Response(
                 {"detail": "No file associated with this document."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -145,10 +165,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
         try:
             # For storages supporting temporary signed URLs (e.g. S3Boto3Storage)
-            download_url = document.file.storage.url(document.file.name, expire=3600)
+            download_url = file_obj.storage.url(file_obj.name, expire=3600)
         except TypeError:
             # Fallback for storages without `expire` argument
-            download_url = document.file.storage.url(document.file.name)
+            download_url = file_obj.storage.url(file_obj.name)
 
         if download_url.startswith("/"):
             download_url = request.build_absolute_uri(download_url)
@@ -159,12 +179,58 @@ class DocumentViewSet(viewsets.ModelViewSet):
             target_type="Document",
             target_id=str(document.pk),
             meta={
-                "file_name": document.file_name or document.file.name,
+                "file_name": file_name,
                 "document_id": document.pk,
             },
         )
 
         return Response({"download_url": download_url})
+    
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Returns a temporary download URL for a specific document file.",
+            )
+        }
+    )
+    @action(detail=False, methods=["get"], url_path=r"files/(?P<file_id>\d+)/download")
+    def download_file(self, request, file_id=None):
+        """
+        Download a specific file by its ID.
+        Only allows downloading files from documents owned by the user.
+        """
+        try:
+            document_file = DocumentFile.objects.select_related('document').get(
+                id=file_id,
+                document__owner=request.user
+            )
+        except DocumentFile.DoesNotExist:
+            return Response(
+                {"detail": "File not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            download_url = document_file.file.storage.url(document_file.file.name, expire=3600)
+        except TypeError:
+            download_url = document_file.file.storage.url(document_file.file.name)
+
+        if download_url.startswith("/"):
+            download_url = request.build_absolute_uri(download_url)
+
+        AuditLog.objects.create(
+            user=request.user,
+            action="download_document_file",
+            target_type="DocumentFile",
+            target_id=str(document_file.pk),
+            meta={
+                "file_name": document_file.file_name,
+                "document_id": document_file.document.pk,
+            },
+        )
+
+        return Response({"download_url": download_url, "file_name": document_file.file_name})
 
     @extend_schema(
         request=DocumentLocalUploadSerializer,

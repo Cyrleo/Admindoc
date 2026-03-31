@@ -92,6 +92,8 @@ class Document(models.Model):
     """
     Core Document model storing metadata and a pointer to the uploaded file.
     In this simple dev setup we use Django's default FileField (local MEDIA_ROOT).
+    
+    Note: The 'file' field is deprecated. Use DocumentFile model instead for multi-file support.
     """
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -100,7 +102,8 @@ class Document(models.Model):
     )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    file = models.FileField(upload_to="documents/%Y/%m/%d/")
+    # DEPRECATED: Use DocumentFile model instead
+    file = models.FileField(upload_to="documents/%Y/%m/%d/", null=True, blank=True)
     file_name = models.CharField(max_length=512, blank=True)
     mime_type = models.CharField(max_length=100, blank=True)
     size = models.PositiveBigIntegerField(null=True, blank=True, help_text="File size in bytes")
@@ -125,6 +128,35 @@ class Document(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.owner})"
+
+
+class DocumentFile(models.Model):
+    """
+    Individual file attached to a Document.
+    Allows multiple files per document (e.g., multiple scans, PDFs, images for one birth certificate).
+    """
+    document = models.ForeignKey(
+        Document,
+        on_delete=models.CASCADE,
+        related_name="files",
+    )
+    file = models.FileField(upload_to="document_files/%Y/%m/%d/")
+    file_name = models.CharField(max_length=512, help_text="Original filename")
+    mime_type = models.CharField(max_length=100, blank=True)
+    size = models.PositiveBigIntegerField(help_text="File size in bytes")
+    is_primary = models.BooleanField(
+        default=False,
+        help_text="Primary/main file for this document"
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-is_primary", "-uploaded_at")
+
+    def __str__(self):
+        return f"{self.file_name} ({self.document.title})"
 
 
 class Reminder(models.Model):

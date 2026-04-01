@@ -247,3 +247,52 @@ python manage.py migrate
 - `SOCIAL_AUTH_GOOGLE_OAUTH2_KEY`, `SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET`
 - `SOCIAL_AUTH_GITHUB_KEY`, `SOCIAL_AUTH_GITHUB_SECRET`
 - `DJOSER_SOCIAL_AUTH_ALLOWED_REDIRECT_URIS`
+
+## 13. Déploiement production (Linux)
+
+### Préparer les variables
+
+Copie `.env.example` puis adapte les valeurs de production :
+
+```bash
+cp .env.example .env
+```
+
+Variables critiques pour démarrer en production :
+
+- `DJANGO_SECRET_KEY`
+- `DEBUG=false`
+- `ALLOWED_HOSTS`
+- `CSRF_TRUSTED_ORIGINS`
+- `DATABASE_URL` (ou variables `DB_*`)
+- `CELERY_BROKER_URL`
+
+### Installer les dépendances et préparer Django
+
+```bash
+source venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py collectstatic --noinput
+python manage.py check --deploy
+```
+
+### Démarrer l'API (Gunicorn)
+
+```bash
+gunicorn doc.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120
+```
+
+### Démarrer Celery en production
+
+Dans 2 services/process séparés :
+
+```bash
+celery -A doc worker -l info
+celery -A doc beat -l info
+```
+
+### Reverse proxy recommandé
+
+Mettez Nginx (ou équivalent) devant Gunicorn avec HTTPS, puis transmettez
+`X-Forwarded-Proto` pour que Django applique correctement les redirections SSL.

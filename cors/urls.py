@@ -1,6 +1,7 @@
 from django.urls import include, path
 
 urlpatterns = [
+    path("admin/v1/",     include("cors.pages.admin_api.urls")),
     path("categories/",     include("cors.pages.category.urls")),
     path("tags/",           include("cors.pages.tag.urls")),
     path("documents/",      include("cors.pages.document.urls")),

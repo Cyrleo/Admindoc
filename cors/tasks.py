@@ -1,3 +1,7 @@
+import csv
+import os
+from pathlib import Path
+
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
@@ -258,3 +262,64 @@ def cleanup_orphaned_cloud_files_task():
             'status': 'error',
             'message': str(exc)
         }
+
+
+@shared_task
+def export_audit_logs_task(actor_id=None, filters=None):
+    """Generate a CSV export for admin audit logs and return file metadata."""
+    from cors.models import AuditLog
+
+    queryset = AuditLog.objects.select_related("user").all().order_by("-timestamp")
+    filters = filters or {}
+
+    action_name = filters.get("action")
+    user_id = filters.get("user_id")
+    target_type = filters.get("target_type")
+    from_date = filters.get("from")
+    to_date = filters.get("to")
+
+    if action_name:
+        queryset = queryset.filter(action=action_name)
+    if user_id:
+        queryset = queryset.filter(user_id=user_id)
+    if target_type:
+        queryset = queryset.filter(target_type=target_type)
+    if from_date:
+        queryset = queryset.filter(timestamp__date__gte=from_date)
+    if to_date:
+        queryset = queryset.filter(timestamp__date__lte=to_date)
+
+    exports_dir = Path(settings.MEDIA_ROOT) / "exports"
+    exports_dir.mkdir(parents=True, exist_ok=True)
+
+    stamp = timezone.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"audit_logs_{stamp}.csv"
+    filepath = exports_dir / filename
+
+    with open(filepath, "w", newline="", encoding="utf-8") as fp:
+        writer = csv.writer(fp)
+        writer.writerow(["id", "timestamp", "user", "action", "target_type", "target_id", "meta"])
+        for log in queryset.iterator():
+            writer.writerow([
+                log.id,
+                log.timestamp.isoformat(),
+                getattr(log.user, "email", ""),
+                log.action,
+                log.target_type,
+                log.target_id,
+                log.meta,
+            ])
+
+    media_url = getattr(settings, "MEDIA_URL", "/media/")
+    if not media_url.endswith("/"):
+        media_url = f"{media_url}/"
+
+    return {
+        "status": "ready",
+        "actor_id": actor_id,
+        "records": queryset.count(),
+        "file_name": filename,
+        "file_path": str(filepath),
+        "download_url": f"{media_url}exports/{filename}",
+        "file_size": os.path.getsize(filepath),
+    }

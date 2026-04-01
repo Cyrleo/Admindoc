@@ -98,10 +98,12 @@ WSGI_APPLICATION = 'doc.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-if os.getenv('DATABASE_URL'):
+database_url = os.getenv('DATABASE_URL')
+
+if database_url:
     DATABASES = {
         'default': dj_database_url.parse(
-            os.getenv('DATABASE_URL'),
+            database_url,
             conn_max_age=600,
             ssl_require=os.getenv('DB_SSL_REQUIRE', 'false').lower() in ('1', 'true', 'yes', 'on'),
         )
@@ -192,6 +194,15 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ),
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.ScopedRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'admin_default': '240/hour',
+        'admin_sensitive': '40/hour',
+        'admin_export': '20/hour',
+        'admin_integrations': '12/hour',
+    },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,

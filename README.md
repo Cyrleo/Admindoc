@@ -15,11 +15,25 @@ Backend Django/DRF pour la gestion de documents administratifs.
 
 ## Structure du projet
 
-- `back/requirements.txt` : dépendances Python
-- `back/doc/` : projet Django
-- `back/doc/manage.py` : entrée Django
-- `back/doc/doc/settings.py` : configuration principale
-- `back/doc/.env.example` : exemple des variables d'environnement
+- `requirements.txt` : dépendances Python
+- `doc/` : projet Django (settings/urls/wsgi)
+- `manage.py` : entrée Django
+- `.env.example` : exemple des variables d'environnement
+- `cors/pages/admin_api/` : API REST d'administration (RBAC)
+- `scripts/` : scripts opérationnels (init rôles, checks, fix venv)
+
+## RBAC admin (multi-rôles)
+
+- Les rôles admin sont portés par les groupes Django.
+- Un utilisateur peut avoir plusieurs rôles simultanément.
+- Endpoint d'assignation multi-rôles : `POST /api/admin/v1/users/{id}/set-roles/`
+- Endpoint matrice rôles/capacités : `GET /api/admin/v1/system/roles/`
+
+Initialiser les groupes de rôles :
+
+```bash
+python scripts/init_admin_roles.py
+```
 
 ## Prérequis
 
@@ -30,7 +44,7 @@ Backend Django/DRF pour la gestion de documents administratifs.
 
 ## 1. Cloner et préparer l'environnement Python
 
-Depuis la racine `back/` :
+Depuis la racine du repo :
 
 ```bash
 python -m venv .venv
@@ -148,10 +162,9 @@ DJOSER_SOCIAL_AUTH_ALLOWED_REDIRECT_URIS=http://localhost:3000/auth/callback
 
 ## 8. Appliquer les migrations
 
-Depuis `back/` :
+Depuis la racine du repo :
 
 ```bash
-cd doc
 python manage.py migrate
 ```
 
@@ -169,7 +182,7 @@ python scripts/init_db_defaults.py --skip-migrate
 
 ## 9. Démarrer le serveur Django
 
-Depuis `back/doc/` :
+Depuis la racine du repo :
 
 ```bash
 python manage.py runserver
@@ -183,7 +196,7 @@ Accès local :
 
 ## 10. Démarrer les workers asynchrones
 
-Dans des terminaux séparés, depuis `back/doc/` :
+Dans des terminaux séparés, depuis la racine du repo :
 
 Worker Celery :
 
@@ -200,8 +213,8 @@ celery -A doc beat -l info
 Si `celery` n'est pas trouvé dans le shell :
 
 ```bash
-../.venv/bin/celery -A doc worker -l info
-../.venv/bin/celery -A doc beat -l info
+venv/bin/celery -A doc worker -l info
+venv/bin/celery -A doc beat -l info
 ```
 
 ## 11. Commandes utiles
@@ -275,6 +288,12 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py collectstatic --noinput
 python manage.py check --deploy
+```
+
+### Vérification pré-déploiement recommandée
+
+```bash
+./scripts/predeploy_check.sh
 ```
 
 ### Démarrer l'API (Gunicorn)

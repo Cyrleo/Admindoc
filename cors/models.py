@@ -134,13 +134,34 @@ class DocumentFile(models.Model):
     """
     Individual file attached to a Document.
     Allows multiple files per document (e.g., multiple scans, PDFs, images for one birth certificate).
+    Can be stored locally or on cloud storage.
     """
+    STORAGE_LOCAL = 'local'
+    STORAGE_CLOUD = 'cloud'
+    STORAGE_CHOICES = [
+        (STORAGE_LOCAL, 'Local'),
+        (STORAGE_CLOUD, 'Cloud'),
+    ]
+    
+    SYNC_PENDING = 'pending'
+    SYNC_UPLOADING = 'uploading'
+    SYNC_SYNCED = 'synced'
+    SYNC_ERROR = 'error'
+    SYNC_STATUS_CHOICES = [
+        (SYNC_PENDING, 'En attente'),
+        (SYNC_UPLOADING, 'Upload en cours'),
+        (SYNC_SYNCED, 'Synchronisé'),
+        (SYNC_ERROR, 'Erreur'),
+    ]
+    
     document = models.ForeignKey(
         Document,
         on_delete=models.CASCADE,
         related_name="files",
     )
-    file = models.FileField(upload_to="document_files/%Y/%m/%d/")
+    
+    # Fichier local (peut être vide si stocké uniquement dans le cloud)
+    file = models.FileField(upload_to="document_files/%Y/%m/%d/", blank=True)
     file_name = models.CharField(max_length=512, help_text="Original filename")
     mime_type = models.CharField(max_length=100, blank=True)
     size = models.PositiveBigIntegerField(help_text="File size in bytes")
@@ -148,6 +169,52 @@ class DocumentFile(models.Model):
         default=False,
         help_text="Primary/main file for this document"
     )
+    
+    # Stockage cloud
+    storage_type = models.CharField(
+        max_length=20,
+        choices=STORAGE_CHOICES,
+        default=STORAGE_LOCAL,
+        help_text="Type de stockage (local ou cloud)"
+    )
+    cloud_storage = models.ForeignKey(
+        'UserCloudStorage',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='files',
+        help_text="Connexion cloud où le fichier est stocké"
+    )
+    cloud_file_id = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="ID du fichier chez le provider cloud"
+    )
+    cloud_file_path = models.CharField(
+        max_length=1024,
+        blank=True,
+        help_text="Chemin complet dans le cloud"
+    )
+    cloud_url = models.CharField(
+        max_length=2048,
+        blank=True,
+        help_text="URL de partage/preview du fichier cloud"
+    )
+    cloud_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Métadonnées du provider cloud"
+    )
+    
+    # État de synchronisation
+    sync_status = models.CharField(
+        max_length=20,
+        choices=SYNC_STATUS_CHOICES,
+        default=SYNC_PENDING
+    )
+    sync_error = models.TextField(blank=True)
+    last_synced = models.DateTimeField(null=True, blank=True)
+    
     uploaded_at = models.DateTimeField(auto_now_add=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -156,7 +223,8 @@ class DocumentFile(models.Model):
         ordering = ("-is_primary", "-uploaded_at")
 
     def __str__(self):
-        return f"{self.file_name} ({self.document.title})"
+        storage_info = f"[{self.get_storage_type_display()}]"
+        return f"{storage_info} {self.file_name} ({self.document.title})"
 
 
 class Reminder(models.Model):
@@ -368,3 +436,185 @@ class Subscription(models.Model):
 
     def __str__(self):
         return f"Subscription({self.user}, {self.plan}, {self.status})"
+
+
+class CloudStorageProvider(models.Model):
+    """
+    Définition des providers de stockage cloud supportés.
+    """
+    PROVIDER_GOOGLE_DRIVE = 'google_drive'
+    PROVIDER_ONEDRIVE = 'onedrive'
+    PROVIDER_DROPBOX = 'dropbox'
+    PROVIDER_TERRABOX = 'terrabox'
+    PROVIDER_LOCAL = 'local'
+    PROVIDER_AWS_S3 = 'aws_s3'
+    PROVIDER_AZURE_BLOB = 'azure_blob'
+    
+    PROVIDER_CHOICES = [
+        (PROVIDER_GOOGLE_DRIVE, 'Google Drive'),
+        (PROVIDER_ONEDRIVE, 'Microsoft OneDrive'),
+        (PROVIDER_DROPBOX, 'Dropbox'),
+        (PROVIDER_TERRABOX, 'Terrabox'),
+        (PROVIDER_LOCAL, 'Serveur Local'),
+        (PROVIDER_AWS_S3, 'Amazon S3'),
+        (PROVIDER_AZURE_BLOB, 'Azure Blob Storage'),
+    ]
+    
+    code = models.CharField(max_length=50, unique=True, choices=PROVIDER_CHOICES)
+    name = models.CharField(max_length=100)
+    icon = models.CharField(max_length=255, blank=True, help_text="URL ou nom d'icône")
+    is_active = models.BooleanField(default=True)
+    requires_oauth = models.BooleanField(default=True)
+    api_base_url = models.CharField(max_length=255, blank=True)
+    oauth_authorize_url = models.CharField(max_length=255, blank=True)
+    oauth_token_url = models.CharField(max_length=255, blank=True)
+    scopes = models.JSONField(default=list, help_text="Scopes OAuth requis")
+    config = models.JSONField(default=dict, help_text="Configuration spécifique au provider")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ("name",)
+    
+    def __str__(self):
+        return self.name
+
+
+class UserCloudStorage(models.Model):
+    """
+    Connexion d'un utilisateur à un provider de stockage cloud.
+    Les tokens OAuth sont stockés de manière chiffrée.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='cloud_storages'
+    )
+    provider = models.ForeignKey(
+        CloudStorageProvider,
+        on_delete=models.PROTECT,
+        related_name='user_connections'
+    )
+    
+    # Authentification OAuth (chiffrés)
+    _access_token = models.CharField(max_length=512, db_column='access_token')
+    _refresh_token = models.CharField(max_length=512, blank=True, db_column='refresh_token')
+    token_expires_at = models.DateTimeField(null=True, blank=True)
+    
+    # Informations du compte cloud
+    cloud_account_id = models.CharField(max_length=255)
+    cloud_account_email = models.EmailField(blank=True)
+    cloud_account_name = models.CharField(max_length=255, blank=True)
+    
+    # Configuration
+    display_name = models.CharField(max_length=100, help_text="Nom personnalisé par l'utilisateur")
+    is_default = models.BooleanField(default=False, help_text="Stockage par défaut pour ce user?")
+    is_active = models.BooleanField(default=True)
+    
+    # Quotas et limites (si disponibles via API)
+    total_space = models.BigIntegerField(null=True, blank=True, help_text="Espace total en bytes")
+    used_space = models.BigIntegerField(null=True, blank=True, help_text="Espace utilisé en bytes")
+    last_sync = models.DateTimeField(null=True, blank=True)
+    
+    # Paramètres avancés
+    base_folder = models.CharField(max_length=500, default='AdminDoc/', help_text="Dossier racine")
+    auto_organize = models.BooleanField(default=True, help_text="Organiser par catégories?")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['user', 'provider', 'cloud_account_id']
+        ordering = ['-is_default', 'display_name']
+    
+    def __str__(self):
+        return f"{self.display_name} ({self.provider.name}) - {self.user.email}"
+    
+    @property
+    def access_token(self):
+        """Déchiffre et retourne le token d'accès."""
+        from cors.utils.encryption import TokenEncryption
+        encryptor = TokenEncryption()
+        return encryptor.decrypt(self._access_token)
+    
+    @access_token.setter
+    def access_token(self, value):
+        """Chiffre et stocke le token d'accès."""
+        from cors.utils.encryption import TokenEncryption
+        encryptor = TokenEncryption()
+        self._access_token = encryptor.encrypt(value)
+    
+    @property
+    def refresh_token(self):
+        """Déchiffre et retourne le refresh token."""
+        if not self._refresh_token:
+            return ''
+        from cors.utils.encryption import TokenEncryption
+        encryptor = TokenEncryption()
+        return encryptor.decrypt(self._refresh_token)
+    
+    @refresh_token.setter
+    def refresh_token(self, value):
+        """Chiffre et stocke le refresh token."""
+        if not value:
+            self._refresh_token = ''
+            return
+        from cors.utils.encryption import TokenEncryption
+        encryptor = TokenEncryption()
+        self._refresh_token = encryptor.encrypt(value)
+    
+    @property
+    def available_space(self):
+        """Calcule l'espace disponible en bytes."""
+        if self.total_space is None or self.used_space is None:
+            return None
+        return self.total_space - self.used_space
+
+
+
+class CloudStorageActivity(models.Model):
+    """
+    Historique des activités sur le stockage cloud.
+    """
+    ACTION_CONNECT = 'connect'
+    ACTION_DISCONNECT = 'disconnect'
+    ACTION_UPLOAD = 'upload'
+    ACTION_DOWNLOAD = 'download'
+    ACTION_DELETE = 'delete'
+    ACTION_SYNC = 'sync'
+    ACTION_ERROR = 'error'
+    
+    ACTION_CHOICES = [
+        (ACTION_CONNECT, 'Connexion'),
+        (ACTION_DISCONNECT, 'Déconnexion'),
+        (ACTION_UPLOAD, 'Upload'),
+        (ACTION_DOWNLOAD, 'Download'),
+        (ACTION_DELETE, 'Suppression'),
+        (ACTION_SYNC, 'Synchronisation'),
+        (ACTION_ERROR, 'Erreur'),
+    ]
+    
+    user_storage = models.ForeignKey(
+        UserCloudStorage,
+        on_delete=models.CASCADE,
+        related_name='activities'
+    )
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    document_file = models.ForeignKey(
+        DocumentFile,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='cloud_activities'
+    )
+    details = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ('-timestamp',)
+        verbose_name_plural = 'Cloud Storage Activities'
+    
+    def __str__(self):
+        return f"{self.get_action_display()} - {self.user_storage} - {self.timestamp}"
+

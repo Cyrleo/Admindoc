@@ -6,6 +6,12 @@ from cors.pages.cloud_storage.views import (
     CloudStorageActivityViewSet,
     DocumentFileCloudViewSet,
 )
+from cors.pages.cloud_storage.oauth_views import (
+    initiate_oauth,
+    oauth_callback_google,
+    oauth_callback_onedrive,
+    oauth_callback_dropbox,
+)
 
 router = DefaultRouter()
 router.register(r'providers', CloudStorageProviderViewSet, basename='cloud-storage-providers')
@@ -15,4 +21,10 @@ router.register(r'files', DocumentFileCloudViewSet, basename='cloud-storage-file
 
 urlpatterns = [
     path('', include(router.urls)),
+    
+    # OAuth endpoints
+    path('oauth/initiate/', initiate_oauth, name='cloud-storage-oauth-initiate'),
+    path('oauth/callback/google/', oauth_callback_google, name='cloud-storage-oauth-callback-google'),
+    path('oauth/callback/onedrive/', oauth_callback_onedrive, name='cloud-storage-oauth-callback-onedrive'),
+    path('oauth/callback/dropbox/', oauth_callback_dropbox, name='cloud-storage-oauth-callback-dropbox'),
 ]

@@ -255,7 +255,8 @@ class DocumentFileCloudViewSet(viewsets.ViewSet):
         POST /api/documents/files/move-to-cloud/{file_id}/
         Body: {
             "target_storage_id": 1,
-            "delete_source": false
+            "delete_source": false,
+            "async": true  # Optionnel: upload asynchrone via Celery
         }
         """
         # Récupérer le fichier
@@ -272,6 +273,7 @@ class DocumentFileCloudViewSet(viewsets.ViewSet):
         
         target_storage = serializer.validated_data.get('target_storage_id')
         delete_source = serializer.validated_data.get('delete_source', False)
+        use_async = request.data.get('async', False)  # Upload asynchrone
         
         if not target_storage:
             return Response(
@@ -279,6 +281,43 @@ class DocumentFileCloudViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Si upload asynchrone demandé, lancer la tâche Celery
+        if use_async:
+            try:
+                from cors.tasks import upload_file_to_cloud_task
+                
+                # Construire le chemin
+                category_name = document_file.document.category.name if document_file.document.category else 'Uncategorized'
+                folder_path = f"{target_storage.base_folder}{category_name}/"
+                
+                # Marquer comme en cours d'upload
+                document_file.sync_status = 'uploading'
+                document_file.save()
+                
+                # Lancer la tâche asynchrone
+                task = upload_file_to_cloud_task.delay(
+                    document_file_id=document_file.id,
+                    user_storage_id=target_storage.id,
+                    folder_path=folder_path
+                )
+                
+                return Response({
+                    'message': 'Cloud upload started asynchronously',
+                    'task_id': task.id,
+                    'file': {
+                        'id': document_file.id,
+                        'sync_status': 'uploading',
+                    }
+                }, status=status.HTTP_202_ACCEPTED)
+                
+            except Exception as e:
+                logger.error(f"Failed to start async upload for file {file_id}: {e}")
+                return Response(
+                    {'error': f'Failed to start async upload: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        # Sinon, upload synchrone (code existant)
         try:
             # Vérifier le token
             if not TokenManager.ensure_valid_token(target_storage):
@@ -293,8 +332,9 @@ class DocumentFileCloudViewSet(viewsets.ViewSet):
             
             backend = CloudStorageFactory.get_backend(target_storage)
             
-            # Construire le chemin
-            path = f"{target_storage.base_folder}/{document_file.document.document_type.name}/"
+            # Construire le chemin basé sur la catégorie du document
+            category_name = document_file.document.category.name if document_file.document.category else 'Uncategorized'
+            path = f"{target_storage.base_folder}{category_name}/"
             
             # Upload
             with document_file.file.open('rb') as f:
@@ -303,7 +343,7 @@ class DocumentFileCloudViewSet(viewsets.ViewSet):
                     path=path,
                     metadata={
                         'name': document_file.file_name,
-                        'mime_type': document_file.file_type,
+                        'mime_type': document_file.mime_type,
                     }
                 )
             

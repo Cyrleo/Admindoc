@@ -236,4 +236,42 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'cors.tasks.schedule_due_reminders_task',
         'schedule': 60 * 60 * 24,
     },
+    'sync-cloud-storage-quotas': {
+        'task': 'cors.tasks.sync_quota_task',
+        'schedule': 60 * 60,  # Toutes les heures
+    },
+    'cleanup-orphaned-cloud-files': {
+        'task': 'cors.tasks.cleanup_orphaned_cloud_files_task',
+        'schedule': 60 * 60 * 24 * 7,  # Une fois par semaine
+    },
 }
+
+# Cloud Storage Configuration
+CLOUD_STORAGE_ENABLED = os.getenv('CLOUD_STORAGE_ENABLED', 'true').lower() in ('1', 'true', 'yes', 'on')
+CLOUD_STORAGE_ENCRYPTION_KEY = os.getenv('CLOUD_STORAGE_ENCRYPTION_KEY', '')
+
+# Google Drive OAuth
+GOOGLE_DRIVE_CLIENT_ID = os.getenv('GOOGLE_DRIVE_CLIENT_ID', '')
+GOOGLE_DRIVE_CLIENT_SECRET = os.getenv('GOOGLE_DRIVE_CLIENT_SECRET', '')
+GOOGLE_DRIVE_REDIRECT_URI = os.getenv('GOOGLE_DRIVE_REDIRECT_URI', 'http://localhost:8000/api/cloud-storage/oauth/callback/google/')
+GOOGLE_DRIVE_SCOPES = [
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/drive.metadata.readonly',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+]
+
+# Microsoft OneDrive OAuth
+ONEDRIVE_CLIENT_ID = os.getenv('ONEDRIVE_CLIENT_ID', '')
+ONEDRIVE_CLIENT_SECRET = os.getenv('ONEDRIVE_CLIENT_SECRET', '')
+ONEDRIVE_REDIRECT_URI = os.getenv('ONEDRIVE_REDIRECT_URI', 'http://localhost:8000/api/cloud-storage/oauth/callback/onedrive/')
+ONEDRIVE_SCOPES = [
+    'Files.ReadWrite',
+    'User.Read',
+    'offline_access',
+]
+
+# Dropbox OAuth
+DROPBOX_APP_KEY = os.getenv('DROPBOX_APP_KEY', '')
+DROPBOX_APP_SECRET = os.getenv('DROPBOX_APP_SECRET', '')
+DROPBOX_REDIRECT_URI = os.getenv('DROPBOX_REDIRECT_URI', 'http://localhost:8000/api/cloud-storage/oauth/callback/dropbox/')

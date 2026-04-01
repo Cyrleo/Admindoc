@@ -1,4 +1,95 @@
-# Changelog - Améliorations du Projet AdminDoc
+# Changelog
+
+## [Unreleased]
+
+### Added - Cloud Storage Multi-Provider (Complete Implementation)
+
+#### Infrastructure
+- Modèles de données pour cloud storage (CloudStorageProvider, UserCloudStorage, CloudStorageActivity)
+- Système de chiffrement Fernet pour tokens OAuth (cors/utils/encryption.py)
+- Factory pattern pour backends cloud (cors/storage/factory.py)
+- Token refresh automatique (cors/storage/token_manager.py)
+- Interface abstraite BaseCloudStorageBackend pour extensibilité
+- Auto-registration des backends via __init__.py
+
+#### Backends Cloud (3 Providers Complets)
+- **Google Drive Backend** (cors/storage/backends/google_drive.py)
+  - OAuth 2.0 flow avec Google
+  - Upload/Download/Delete fichiers
+  - Upload resumable pour gros fichiers
+  - Gestion dossiers et paths automatiques
+  - Récupération quota et informations compte
+  - Génération liens de partage
+  
+- **OneDrive Backend** (cors/storage/backends/onedrive.py)
+  - OAuth 2.0 MSAL flow (Microsoft Graph API)
+  - Upload simple (<4MB) et chunked (10MB chunks)
+  - Download/Delete fichiers et dossiers
+  - Création dossiers automatique
+  - Récupération quota OneDrive
+  - Liens de partage temporaires
+  
+- **Dropbox Backend** (cors/storage/backends/dropbox.py)
+  - OAuth 2.0 flow (long-lived tokens)
+  - Upload simple et chunked (4MB chunks)
+  - Download/Delete fichiers
+  - Gestion dossiers
+  - Récupération quota Dropbox
+  - Génération liens de partage
+
+#### Uploads Asynchrones (Celery)
+- Tâche upload_file_to_cloud_task (async upload avec retry)
+- Tâche sync_quota_task (synchronisation périodique quotas)
+- Tâche cleanup_orphaned_cloud_files_task (nettoyage hebdomadaire)
+- Configuration Celery Beat pour tâches périodiques
+- Support upload sync/async dans API
+
+#### API REST Endpoints
+- Endpoints providers cloud (liste, détails)
+- Endpoints connexions cloud (CRUD complet)
+- Actions sur connexions (disconnect, sync_quota, set_default, test_connection)
+- OAuth flow complet pour 3 providers (initiate + callbacks)
+- Transfert fichiers local ↔ cloud (sync/async)
+- Historique des activités cloud
+
+#### Configuration
+- Variables environnement cloud storage (settings.py)
+- Support OAuth Google Drive, OneDrive, Dropbox
+- Feature flag CLOUD_STORAGE_ENABLED
+- Clé de chiffrement CLOUD_STORAGE_ENCRYPTION_KEY
+- URLs de redirection OAuth pour 3 providers
+
+#### Scripts & Documentation
+- Script d'initialisation providers (scripts/init_cloud_providers.py)
+- Guide de configuration (CLOUD_STORAGE_CONFIG.md)
+- Documentation technique (CLOUD_STORAGE_README.md)
+- Synthèse d'implémentation complète (IMPLEMENTATION_SUMMARY.md)
+- .env.example mis à jour
+
+#### Dépendances
+- cryptography==44.0.0 (chiffrement tokens)
+- google-auth==2.36.0
+- google-auth-oauthlib==1.2.1
+- google-auth-httplib2==0.2.0
+- google-api-python-client==2.156.0
+- msal==1.31.1 (OneDrive)
+- dropbox==12.0.2 (Dropbox)
+
+### Changed
+- DocumentFile model étendu avec champs cloud storage
+- cors/pages/cloud_storage/urls.py avec routes OAuth
+- requirements.txt avec dépendances cloud
+
+### Fixed
+- Bug ligne 297 views.py : document.document_type.name → document.category.name
+
+### Security
+- Chiffrement automatique tokens OAuth avec Fernet
+- Refresh automatique tokens avant expiration
+- CSRF protection avec states OAuth
+- Scopes minimaux par provider
+
+## [Previous entries remain unchanged] - Améliorations du Projet AdminDoc
 
 ## 🎯 Améliorations Implémentées (31 Mars 2026)
 

@@ -75,10 +75,10 @@ class DocumentLocalUploadSerializer(serializers.ModelSerializer):
         help_text="List of files to upload (images, PDFs, Word, Excel, etc.)"
     )
     category = serializers.PrimaryKeyRelatedField(
-        queryset=Category.objects.none(), required=False, allow_null=True
+        queryset=Category.objects.all(), required=False, allow_null=True
     )
     tags = serializers.PrimaryKeyRelatedField(
-        queryset=Tag.objects.none(), many=True, required=False
+        queryset=Tag.objects.all(), many=True, required=False
     )
 
     class Meta:
@@ -93,18 +93,6 @@ class DocumentLocalUploadSerializer(serializers.ModelSerializer):
             "date_expiration",
             "archived",
         ]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        request = self.context.get("request")
-        user = getattr(request, "user", None)
-        if user and user.is_authenticated:
-            self.fields["category"].queryset = Category.objects.filter(
-                owner=user
-            ) | Category.objects.filter(is_default=True)
-            self.fields["tags"].queryset = Tag.objects.filter(owner=user) | Tag.objects.filter(
-                is_default=True
-            )
 
     def validate_files(self, files):
         """Validate uploaded files."""

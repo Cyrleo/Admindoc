@@ -1,10 +1,16 @@
 from rest_framework import serializers
+from rest_framework.reverse import reverse
 
 from cors.models import Category, Document, DocumentFile, Tag
 
 
 class DocumentFileSerializer(serializers.ModelSerializer):
     """Serializer for individual document files."""
+    download_url = serializers.SerializerMethodField()
+
+    def get_download_url(self, obj):
+        request = self.context.get("request")
+        return reverse("document-download-file", kwargs={"file_id": obj.pk}, request=request)
     
     class Meta:
         model = DocumentFile
@@ -18,17 +24,44 @@ class DocumentFileSerializer(serializers.ModelSerializer):
             'uploaded_at',
             'created_at',
             'updated_at',
+            'download_url',
         ]
-        read_only_fields = ['id', 'uploaded_at', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'uploaded_at', 'created_at', 'updated_at', 'download_url']
 
 
 class DocumentSerializer(serializers.ModelSerializer):
     owner = serializers.HiddenField(default=serializers.CurrentUserDefault())
     files = DocumentFileSerializer(many=True, read_only=True)
+    download_url = serializers.SerializerMethodField()
+
+    def get_download_url(self, obj):
+        request = self.context.get("request")
+        return reverse("document-download", kwargs={"pk": obj.pk}, request=request)
 
     class Meta:
         model = Document
-        fields = "__all__"
+        fields = [
+            'id',
+            'owner',
+            'files',
+            'download_url',
+            'title',
+            'description',
+            'file',
+            'file_name',
+            'mime_type',
+            'size',
+            'category',
+            'tags',
+            'date_issued',
+            'date_expiration',
+            'is_encrypted',
+            'checksum',
+            'created_at',
+            'updated_at',
+            'archived',
+        ]
+        read_only_fields = ['id', 'files', 'download_url', 'created_at', 'updated_at']
 
 
 class DocumentLocalUploadSerializer(serializers.ModelSerializer):

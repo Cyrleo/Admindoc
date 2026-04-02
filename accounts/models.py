@@ -3,9 +3,10 @@ from django.db import models
 from django.utils import timezone
 
 from .managers import CustomUserManager
+from cors.model_mixins import UUIDModel
 
 
-class User(AbstractBaseUser, PermissionsMixin):
+class User(UUIDModel, AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)

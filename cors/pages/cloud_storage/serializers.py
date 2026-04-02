@@ -107,7 +107,7 @@ class CloudFileUploadSerializer(serializers.Serializer):
         required=True,
         help_text="Liste de fichiers à uploader"
     )
-    storage_id = serializers.IntegerField(
+    storage_id = serializers.UUIDField(
         required=False,
         allow_null=True,
         help_text="ID du UserCloudStorage (optionnel, défaut=local)"
@@ -136,7 +136,7 @@ class DocumentFileMoveSerializer(serializers.Serializer):
     """
     Serializer pour déplacer un fichier entre storages.
     """
-    target_storage_id = serializers.IntegerField(
+    target_storage_id = serializers.UUIDField(
         required=False,
         allow_null=True,
         help_text="ID du storage cible (null=local)"

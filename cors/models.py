@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.utils import timezone
+from datetime import datetime, timedelta
 import uuid
 
 
@@ -11,6 +12,7 @@ class Category(models.Model):
     - is_default=True, owner=None  → shared, visible to all without auth (read-only for non-staff)
     - is_default=False, owner=User → personal category, visible only to its owner
     """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -53,6 +55,7 @@ class Tag(models.Model):
     - is_default=True, owner=None  -> shared, visible to all without auth
     - is_default=False, owner=User -> personal tag scoped to owner
     """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -95,6 +98,7 @@ class Document(models.Model):
     
     Note: The 'file' field is deprecated. Use DocumentFile model instead for multi-file support.
     """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -154,6 +158,7 @@ class DocumentFile(models.Model):
         (SYNC_ERROR, 'Erreur'),
     ]
     
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     document = models.ForeignKey(
         Document,
         on_delete=models.CASCADE,
@@ -223,11 +228,12 @@ class DocumentFile(models.Model):
         ordering = ("-is_primary", "-uploaded_at")
 
     def __str__(self):
-        storage_info = f"[{self.get_storage_type_display()}]"
+        storage_info = f"[{self.storage_type}]"
         return f"{storage_info} {self.file_name} ({self.document.title})"
 
 
 class Reminder(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     """
     Reminder configuration for a document expiration.
     A periodic job should create/send reminders according to `days_before`.
@@ -267,9 +273,9 @@ class Reminder(models.Model):
         if not self.document.date_expiration:
             return None
         target_date = timezone.make_aware(
-            timezone.datetime.combine(self.document.date_expiration, timezone.datetime.min.time())
+            datetime.combine(self.document.date_expiration, datetime.min.time())
         )
-        run_dt = target_date - timezone.timedelta(days=self.days_before)
+        run_dt = target_date - timedelta(days=self.days_before)
         self.next_run = run_dt
         self.save(update_fields=["next_run"])
         return self.next_run
@@ -279,6 +285,7 @@ class Reminder(models.Model):
 
 
 class ReminderLog(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     STATUS_PENDING = "pending"
     STATUS_SENT = "sent"
     STATUS_FAILED = "failed"
@@ -307,12 +314,12 @@ class ReminderLog(models.Model):
 
 
 class SharedLink(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     """
     Secure temporary share link for a document.
     Uses a UUID token to reference the link. Optionally protected by password,
     with download limits and expiration.
     """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     document = models.ForeignKey(
         Document,
         on_delete=models.CASCADE,
@@ -369,6 +376,7 @@ class SharedLink(models.Model):
 
 
 class AuditLog(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     """
     Lightweight audit log for important user actions.
     Store free-form metadata in JSON for flexibility.
@@ -394,6 +402,7 @@ class AuditLog(models.Model):
 
 
 class Subscription(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     PLAN_FREE = "free"
     PLAN_PRO = "pro"
     PLAN_BUSINESS = "business"
@@ -439,6 +448,7 @@ class Subscription(models.Model):
 
 
 class CloudStorageProvider(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     """
     Définition des providers de stockage cloud supportés.
     """
@@ -481,6 +491,7 @@ class CloudStorageProvider(models.Model):
 
 
 class UserCloudStorage(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     """
     Connexion d'un utilisateur à un provider de stockage cloud.
     Les tokens OAuth sont stockés de manière chiffrée.
@@ -573,6 +584,7 @@ class UserCloudStorage(models.Model):
 
 
 class CloudStorageActivity(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     """
     Historique des activités sur le stockage cloud.
     """
@@ -616,5 +628,5 @@ class CloudStorageActivity(models.Model):
         verbose_name_plural = 'Cloud Storage Activities'
     
     def __str__(self):
-        return f"{self.get_action_display()} - {self.user_storage} - {self.timestamp}"
+        return f"{self.action} - {self.user_storage} - {self.timestamp}"
 

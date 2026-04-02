@@ -1,5 +1,13 @@
+from pathlib import Path
+from tempfile import SpooledTemporaryFile
+import zipfile
+from io import BytesIO
+
 from django.db.models import Q
-from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
+from django.http import FileResponse
+from django.utils.text import slugify
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -8,6 +16,32 @@ from rest_framework.response import Response
 from cors.models import AuditLog, Document, DocumentFile
 from .filters import DocumentFilter
 from .serializers import DocumentLocalUploadSerializer, DocumentSerializer
+from cors.storage.factory import CloudStorageFactory
+from cors.storage.token_manager import TokenManager
+
+
+def _download_name(value, fallback):
+    name = value or fallback
+    return Path(name).name
+
+
+def _read_document_file_content(document_file):
+    if document_file.file and document_file.file.name:
+        with document_file.file.open("rb") as file_handle:
+            return file_handle.read()
+
+    if (
+        document_file.storage_type == DocumentFile.STORAGE_CLOUD
+        and document_file.cloud_storage
+        and document_file.cloud_file_id
+    ):
+        if not TokenManager.ensure_valid_token(document_file.cloud_storage):
+            raise PermissionError("Failed to authenticate with cloud storage")
+
+        backend = CloudStorageFactory.get_backend(document_file.cloud_storage)
+        return backend.download_file(document_file.cloud_file_id)
+
+    raise FileNotFoundError("No downloadable content found for this document file")
 
 
 class DocumentViewSet(viewsets.ModelViewSet):
@@ -128,73 +162,77 @@ class DocumentViewSet(viewsets.ModelViewSet):
     @extend_schema(
         responses={
             200: OpenApiResponse(
-                response=OpenApiTypes.OBJECT,
-                description="Returns a temporary download URL for the document's primary file or all files.",
+                response=OpenApiTypes.BINARY,
+                description="Returns a ZIP archive containing all files for the document.",
             )
         }
     )
     @action(detail=True, methods=["get"], url_path="download")
     def download(self, request, pk=None):
         """
-        Download document file(s).
-        Returns the primary file by default, or all files if no primary is set.
+        Download all files for a document as a ZIP archive.
         For backward compatibility, also checks the deprecated 'file' field.
         """
         document = self.get_object()
-        
-        # Try to get files from the new DocumentFile model
-        document_files = document.files.all()
-        
-        if document_files.exists():
-            # Get primary file or first file
-            primary_file = document_files.filter(is_primary=True).first()
-            if not primary_file:
-                primary_file = document_files.first()
-            
-            file_obj = primary_file.file
-            file_name = primary_file.file_name
-        elif document.file:
-            # Backward compatibility: use deprecated file field
-            file_obj = document.file
-            file_name = document.file_name or document.file.name
-        else:
+
+        document_files = list(document.files.all())
+        if not document_files and document.file:
+            document_files = [document]
+
+        if not document_files:
             return Response(
                 {"detail": "No file associated with this document."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            # For storages supporting temporary signed URLs (e.g. S3Boto3Storage)
-            download_url = file_obj.storage.url(file_obj.name, expire=3600)
-        except TypeError:
-            # Fallback for storages without `expire` argument
-            download_url = file_obj.storage.url(file_obj.name)
+        zip_buffer = SpooledTemporaryFile(max_size=10 * 1024 * 1024, mode="w+b")
+        archive_root = slugify(document.title) or f"document-{document.pk}"
+        zip_filename = f"{archive_root}-{document.pk}.zip"
 
-        if download_url.startswith("/"):
-            download_url = request.build_absolute_uri(download_url)
+        with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+            for index, item in enumerate(document_files, start=1):
+                if isinstance(item, Document):
+                    file_field = item.file
+                    file_name = _download_name(item.file_name, item.file.name)
+                else:
+                    file_field = item.file
+                    file_name = _download_name(item.file_name, item.file.name)
+
+                archive_name = f"{index:02d}_{file_name}"
+                if file_field and file_field.name:
+                    with file_field.open("rb") as file_handle:
+                        zip_file.writestr(archive_name, file_handle.read())
+                else:
+                    content = _read_document_file_content(item)
+                    zip_file.writestr(archive_name, content)
+
+        zip_buffer.seek(0)
 
         AuditLog.objects.create(
             user=request.user,
-            action="download_document",
+            action="download_document_zip",
             target_type="Document",
             target_id=str(document.pk),
             meta={
-                "file_name": file_name,
+                "file_count": len(document_files),
+                "zip_name": zip_filename,
                 "document_id": document.pk,
             },
         )
 
-        return Response({"download_url": download_url})
+        response = FileResponse(zip_buffer, as_attachment=True, filename=zip_filename)
+        response["Content-Type"] = "application/zip"
+        return response
     
     @extend_schema(
         responses={
             200: OpenApiResponse(
-                response=OpenApiTypes.OBJECT,
-                description="Returns a temporary download URL for a specific document file.",
+                response=OpenApiTypes.BINARY,
+                description="Returns the requested document file.",
             )
         }
     )
-    @action(detail=False, methods=["get"], url_path=r"files/(?P<file_id>\d+)/download")
+    @action(detail=False, methods=["get"], url_path=r"files/(?P<file_id>[0-9a-fA-F-]{36})/download")
     def download_file(self, request, file_id=None):
         """
         Download a specific file by its ID.
@@ -211,14 +249,6 @@ class DocumentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        try:
-            download_url = document_file.file.storage.url(document_file.file.name, expire=3600)
-        except TypeError:
-            download_url = document_file.file.storage.url(document_file.file.name)
-
-        if download_url.startswith("/"):
-            download_url = request.build_absolute_uri(download_url)
-
         AuditLog.objects.create(
             user=request.user,
             action="download_document_file",
@@ -230,7 +260,23 @@ class DocumentViewSet(viewsets.ModelViewSet):
             },
         )
 
-        return Response({"download_url": download_url, "file_name": document_file.file_name})
+        file_name = _download_name(document_file.file_name, document_file.file.name)
+        try:
+            if document_file.file and document_file.file.name:
+                file_handle = document_file.file.open("rb")
+                response = FileResponse(file_handle, as_attachment=True, filename=file_name)
+            else:
+                content = _read_document_file_content(document_file)
+                response = FileResponse(BytesIO(content), as_attachment=True, filename=file_name)
+        except PermissionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
+        except FileNotFoundError:
+            return Response(
+                {"detail": "No file associated with this document file."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return response
 
     @extend_schema(
         request=DocumentLocalUploadSerializer,

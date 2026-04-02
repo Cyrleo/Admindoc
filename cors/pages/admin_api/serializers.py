@@ -121,7 +121,7 @@ class AdminReminderSerializer(serializers.ModelSerializer):
 
 class AdminReminderLogSerializer(serializers.ModelSerializer):
     """Serializer des logs d'envoi de rappels."""
-    reminder_id = serializers.IntegerField(source="reminder.id", read_only=True)
+    reminder_id = serializers.UUIDField(source="reminder.id", read_only=True)
 
     class Meta:
         model = ReminderLog

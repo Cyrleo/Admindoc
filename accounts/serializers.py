@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from djoser.serializers import UserCreatePasswordRetypeSerializer
 from .models import User
 
 
@@ -22,16 +23,13 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'date_joined', 'is_staff', 'is_active')
 
 
-class UserCreateSerializer(serializers.ModelSerializer):
+class UserCreateSerializer(UserCreatePasswordRetypeSerializer):
     """
-    Serializer for user registration/signup.
+    Serializer for user registration/signup via /auth/users/.
     """
-    password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    first_name = serializers.CharField(required=True, allow_blank=False)
+    last_name = serializers.CharField(required=True, allow_blank=False)
     
     class Meta:
         model = User
-        fields = ('email', 'password', 'first_name', 'last_name')
-        
-    def create(self, validated_data):
-        user = User.objects.create_user(**validated_data)
-        return user
+        fields = ('email', 'password', 're_password', 'first_name', 'last_name')

@@ -155,9 +155,16 @@ Sans ces clés, les endpoints Stripe existent mais répondront que Stripe n'est 
 ```env
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY=
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET=
+SOCIAL_AUTH_GOOGLE_OAUTH2_REDIRECT_URI=http://localhost:8000/auth/google/callback/
 SOCIAL_AUTH_GITHUB_KEY=
 SOCIAL_AUTH_GITHUB_SECRET=
 DJOSER_SOCIAL_AUTH_ALLOWED_REDIRECT_URIS=http://localhost:3000/auth/callback
+
+# Bootstrap admin account seeded by init script
+INIT_ADMIN_EMAIL=admin@admindoc.local
+INIT_ADMIN_PASSWORD=ChangeMeNow!123
+INIT_ADMIN_FIRST_NAME=Admin
+INIT_ADMIN_LAST_NAME=Root
 ```
 
 ## 8. Appliquer les migrations

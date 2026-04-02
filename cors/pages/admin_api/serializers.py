@@ -85,7 +85,7 @@ class AdminDefaultCategorySerializer(serializers.ModelSerializer):
     """Serializer admin des categories par defaut (globales)."""
     class Meta:
         model = Category
-        fields = ["id", "name", "color", "icon", "is_default", "created_at", "updated_at"]
+        fields = ["id", "name", "icon", "is_default", "created_at", "updated_at"]
         read_only_fields = ["id", "is_default", "created_at", "updated_at"]
 
 
@@ -93,7 +93,7 @@ class AdminDefaultTagSerializer(serializers.ModelSerializer):
     """Serializer admin des tags par defaut (globaux)."""
     class Meta:
         model = Tag
-        fields = ["id", "name", "is_default", "created_at"]
+        fields = ["id", "name", "color", "is_default", "created_at"]
         read_only_fields = ["id", "is_default", "created_at"]
 
 

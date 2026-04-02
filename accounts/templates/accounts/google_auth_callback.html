@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Google Auth Callback</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f3ee;
+      --bg-accent: #eadfcb;
+      --card: rgba(255, 255, 255, 0.88);
+      --text: #1e1b16;
+      --muted: #665c4f;
+      --primary: #0f766e;
+      --primary-strong: #115e59;
+      --danger: #b91c1c;
+      --border: rgba(62, 51, 41, 0.14);
+      --shadow: 0 24px 60px rgba(54, 41, 26, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 28%),
+        radial-gradient(circle at 85% 15%, rgba(217, 119, 6, 0.16), transparent 22%),
+        linear-gradient(135deg, var(--bg), var(--bg-accent));
+      padding: 40px 20px;
+    }
+
+    .shell {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      gap: 22px;
+    }
+
+    .hero,
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .hero {
+      padding: 28px 30px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .eyebrow {
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: .18em;
+      font-size: 12px;
+      color: var(--primary-strong);
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3.25rem);
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+
+    .subtle {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      max-width: 70ch;
+      line-height: 1.55;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: 999px;
+      font: 700 13px/1 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .status-success {
+      background: rgba(15, 118, 110, .12);
+      color: var(--primary-strong);
+    }
+
+    .status-error {
+      background: rgba(185, 28, 28, .12);
+      color: var(--danger);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 22px;
+    }
+
+    .panel {
+      padding: 24px;
+    }
+
+    .panel h2 {
+      margin: 0 0 16px;
+      font-size: 1.1rem;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 10px 18px;
+      align-items: start;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .kv dt {
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .kv dd {
+      margin: 0;
+      font-weight: 600;
+      word-break: break-word;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      background: rgba(255,255,255,.72);
+      margin-top: 18px;
+    }
+
+    .token {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,.92);
+      margin-top: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      overflow-x: auto;
+    }
+
+    .copy-btn,
+    .button {
+      border: 0;
+      border-radius: 999px;
+      cursor: pointer;
+      text-decoration: none;
+      font: 700 13px/1 ui-sans-serif, system-ui, sans-serif;
+      transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+
+    .copy-btn {
+      padding: 10px 14px;
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 10px 24px rgba(15, 118, 110, .24);
+      white-space: nowrap;
+    }
+
+    .button {
+      display: inline-flex;
+      padding: 12px 16px;
+      background: var(--primary-strong);
+      color: white;
+      margin-right: 10px;
+      margin-top: 10px;
+    }
+
+    .button.secondary {
+      background: transparent;
+      color: var(--primary-strong);
+      border: 1px solid rgba(15, 118, 110, .28);
+    }
+
+    .copy-btn:hover,
+    .button:hover {
+      transform: translateY(-1px);
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .error {
+      color: var(--danger);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-weight: 700;
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: .92rem;
+      line-height: 1.5;
+      margin-top: 16px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+
+    @media (max-width: 880px) {
+      .grid { grid-template-columns: 1fr; }
+      .kv { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">OAuth callback</div>
+        <h1>Connexion Google</h1>
+        <p class="subtle">
+          Page intermédiaire Django pour inspecter le retour Google, créer ou mettre à jour l'utilisateur,
+          puis émettre la session Django et les jetons JWT.
+        </p>
+      </div>
+      {% if status == "success" %}
+        <div class="status-pill status-success">Succès - {{ provider }}</div>
+      {% else %}
+        <div class="status-pill status-error">Erreur - {{ provider|default:"Google" }}</div>
+      {% endif %}
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>Résultat</h2>
+
+        {% if status == "success" %}
+          <div class="card">
+            <dl class="kv">
+              <dt>Email</dt>
+              <dd>{{ user.email }}</dd>
+              <dt>Prénom</dt>
+              <dd>{{ user.first_name|default:"-" }}</dd>
+              <dt>Nom</dt>
+              <dd>{{ user.last_name|default:"-" }}</dd>
+              <dt>Statut utilisateur</dt>
+              <dd>{% if created %}Créé{% else %}Mis à jour{% endif %}</dd>
+              <dt>Connecté Django</dt>
+              <dd>Oui</dd>
+            </dl>
+          </div>
+
+          <div class="card">
+            <h2>Données Google</h2>
+            <pre>{{ google_profile_json }}</pre>
+          </div>
+
+          <div class="card">
+            <h2>Jetons générés</h2>
+            <div class="token">
+              <span id="access-token">{{ token_pair.access }}</span>
+              <button class="copy-btn" type="button" data-copy="access-token">Copier access</button>
+            </div>
+            <div class="token">
+              <span id="refresh-token">{{ token_pair.refresh }}</span>
+              <button class="copy-btn" type="button" data-copy="refresh-token">Copier refresh</button>
+            </div>
+          </div>
+
+          <div class="footer-note">
+            {% if next_url %}
+              Redirection prévue vers : {{ next_url }}
+            {% else %}
+              Aucun redirect frontend n'est configuré pour l'instant. Cette page sert de validation et de point
+              d'intégration temporaire.
+            {% endif %}
+          </div>
+
+        {% else %}
+          <div class="card">
+            <p class="error">{{ error }}</p>
+            <p class="footer-note">
+              Vérifie le client Google, l'URI de callback et la validité du state OAuth.
+            </p>
+          </div>
+        {% endif %}
+      </article>
+
+      <aside class="panel">
+        <h2>Inspection rapide</h2>
+        <div class="card">
+          <dl class="kv">
+            <dt>Provider</dt>
+            <dd>{{ provider|default:"Google" }}</dd>
+            <dt>État</dt>
+            <dd>{{ status }}</dd>
+            <dt>Session Django</dt>
+            <dd>{% if status == "success" %}Authentifiée{% else %}Non authentifiée{% endif %}</dd>
+          </dl>
+        </div>
+
+        <div class="card">
+          <h2>Actions</h2>
+          {% if next_url %}
+            <a class="button" href="{{ next_url }}">Continuer</a>
+          {% endif %}
+          <a class="button secondary" href="/auth/google/">Relancer Google</a>
+        </div>
+
+        <div class="card">
+          <h2>Notes</h2>
+          <pre>Cette page est volontairement verbeuse pour valider le flow.
+Quand le frontend sera prêt, on pourra remplacer cet affichage par une redirection propre.</pre>
+        </div>
+      </aside>
+    </section>
+  </div>
+
+  <script>
+    document.querySelectorAll('[data-copy]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const target = document.getElementById(button.getAttribute('data-copy'));
+        if (!target) return;
+        try {
+          await navigator.clipboard.writeText(target.textContent.trim());
+          const original = button.textContent;
+          button.textContent = 'Copié';
+          setTimeout(() => { button.textContent = original; }, 1200);
+        } catch (error) {
+          console.error(error);
+        }
+      });
+    });
+  </script>
+</body>
+</html>

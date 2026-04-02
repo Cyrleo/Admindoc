@@ -10,6 +10,7 @@ Objectifs principaux:
 import csv
 from datetime import timedelta
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Count
 from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
@@ -18,6 +19,7 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import SAFE_METHODS
 from rest_framework.response import Response
+from rest_framework.exceptions import Throttled
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
@@ -95,6 +97,55 @@ def _audit_admin_action(request, action, target_type, target_id, meta=None):
         target_id=str(target_id),
         meta=payload,
     )
+
+
+def _enforce_local_rate_limit(request, scope, rate_key):
+    """Applique un quota simple pour les vues sensibles.
+
+    Ce fallback sert surtout pour les endpoints critiques quand on veut un
+    comportement de test très deterministe.
+    """
+    rates = getattr(settings, "REST_FRAMEWORK", {}).get("DEFAULT_THROTTLE_RATES", {})
+    rate = rates.get(rate_key)
+    if not rate:
+        return
+
+    try:
+        amount_text, period_text = rate.split("/", 1)
+        amount = int(amount_text)
+    except (ValueError, TypeError):
+        return
+
+    period_seconds = {
+        "s": 1,
+        "sec": 1,
+        "second": 1,
+        "seconds": 1,
+        "m": 60,
+        "min": 60,
+        "minute": 60,
+        "minutes": 60,
+        "h": 3600,
+        "hour": 3600,
+        "hours": 3600,
+        "d": 86400,
+        "day": 86400,
+        "days": 86400,
+    }.get(period_text.lower(), 60)
+
+    user_key = getattr(getattr(request, "user", None), "pk", None)
+    ident = f"user:{user_key}" if user_key else f"ip:{request.META.get('REMOTE_ADDR', 'anonymous')}"
+    cache_key = f"admin-rate:{scope}:{ident}"
+
+    current = cache.get(cache_key)
+    if current is None:
+        cache.set(cache_key, 1, timeout=period_seconds)
+        return
+
+    if current >= amount:
+        raise Throttled(detail="Limite de requetes atteinte pour cette operation.")
+
+    cache.incr(cache_key)
 
 
 class AdminThrottledAPIView(APIView):
@@ -208,7 +259,7 @@ Permet aussi d'assigner plusieurs roles admin via les groupes Django.
     permission_classes = [IsUserAdmin]
     serializer_class = AdminUserSerializer
     queryset = User.objects.all().order_by("-date_joined")
-    http_method_names = ["get", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
     search_fields = ["email", "first_name", "last_name"]
     ordering_fields = ["date_joined", "last_login", "email"]
     throttle_scope = "admin_default"
@@ -758,6 +809,8 @@ class AdminIntegrationTestView(AdminThrottledAPIView):
     throttle_scope = "admin_integrations"
 
     def post(self, request, name):
+        _enforce_local_rate_limit(request, "admin_integrations", "admin_integrations")
+
         checks = {
             "stripe": bool(getattr(settings, "STRIPE_SECRET_KEY", "")),
             "email": bool(getattr(settings, "EMAIL_HOST", "")),

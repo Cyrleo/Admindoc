@@ -19,7 +19,6 @@ class Category(models.Model):
         related_name="categories",
     )
     name = models.CharField(max_length=150)
-    color = models.CharField(max_length=7, blank=True, help_text="Hex color like #RRGGBB")
     icon = models.CharField(max_length=64, blank=True, help_text="Optional icon name")
     is_default = models.BooleanField(
         default=False,
@@ -62,6 +61,7 @@ class Tag(models.Model):
         related_name="tags",
     )
     name = models.CharField(max_length=64)
+    color = models.CharField(max_length=7, blank=True, help_text="Hex color like #RRGGBB")
     is_default = models.BooleanField(
         default=False,
         db_index=True,

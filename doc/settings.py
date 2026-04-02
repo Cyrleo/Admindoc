@@ -238,7 +238,10 @@ DJOSER = {
     'USERNAME_CHANGED_EMAIL_CONFIRMATION': False,
     'SOCIAL_AUTH_ALLOWED_REDIRECT_URIS': [
         uri.strip()
-        for uri in os.getenv('DJOSER_SOCIAL_AUTH_ALLOWED_REDIRECT_URIS', '').split(',')
+        for uri in os.getenv(
+            'DJOSER_SOCIAL_AUTH_ALLOWED_REDIRECT_URIS',
+            'http://localhost:3000/auth/callback,http://127.0.0.1:3000/auth/callback',
+        ).split(',')
         if uri.strip()
     ],
     'SERIALIZERS': {
@@ -251,6 +254,16 @@ DJOSER = {
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv('SOCIAL_AUTH_GOOGLE_OAUTH2_KEY', '')
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET', '')
+SOCIAL_AUTH_GOOGLE_OAUTH2_REDIRECT_URI = os.getenv(
+    'SOCIAL_AUTH_GOOGLE_OAUTH2_REDIRECT_URI',
+    'http://localhost:8000/auth/google/callback/',
+)
+SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = [
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+]
+SOCIAL_AUTH_GOOGLE_OAUTH2_EXTRA_DATA = ['first_name', 'last_name']
 
 SOCIAL_AUTH_GITHUB_KEY = os.getenv('SOCIAL_AUTH_GITHUB_KEY', '')
 SOCIAL_AUTH_GITHUB_SECRET = os.getenv('SOCIAL_AUTH_GITHUB_SECRET', '')

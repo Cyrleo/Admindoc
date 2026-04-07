@@ -2,8 +2,15 @@ from rest_framework import serializers
 from rest_framework.reverse import reverse
 from drf_spectacular.utils import extend_schema_field
 from django.urls import NoReverseMatch
+from django.conf import settings
 
 from cors.models import Category, Document, DocumentFile, Tag
+
+
+def _is_cloudinary_default_storage_enabled():
+    storages = getattr(settings, "STORAGES", {}) or {}
+    default_backend = (storages.get("default") or {}).get("BACKEND", "")
+    return "cloudinary_storage.storage.MediaCloudinaryStorage" in str(default_backend)
 
 
 class DocumentFileSerializer(serializers.ModelSerializer):
@@ -144,6 +151,12 @@ class DocumentLocalUploadSerializer(serializers.ModelSerializer):
             
             if tags:
                 document.tags.set(tags)
+
+            storage_type = (
+                DocumentFile.STORAGE_CLOUD
+                if _is_cloudinary_default_storage_enabled()
+                else DocumentFile.STORAGE_LOCAL
+            )
             
             # Create DocumentFile entries for each uploaded file
             for index, uploaded_file in enumerate(uploaded_files):
@@ -153,6 +166,7 @@ class DocumentLocalUploadSerializer(serializers.ModelSerializer):
                     file_name=uploaded_file.name,
                     mime_type=getattr(uploaded_file, "content_type", "") or "",
                     size=uploaded_file.size,
+                    storage_type=storage_type,
                     is_primary=(index == 0),  # First file is primary
                 )
             

@@ -198,6 +198,12 @@ class CategoryAuditMetaSerializationTests(TestCase):
 		self.assertIsInstance(audit.meta.get("owner_id"), str)
 
 
+@override_settings(
+	STORAGES={
+		"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+		"staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+	}
+)
 class DocumentFileDownloadAuditMetaSerializationTests(TestCase):
 	"""Ensure UUID values in download audit meta are JSON serializable."""
 
@@ -228,6 +234,12 @@ class DocumentFileDownloadAuditMetaSerializationTests(TestCase):
 		self.assertIsInstance(audit.meta.get("document_id"), str)
 
 
+@override_settings(
+	STORAGES={
+		"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+		"staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+	}
+)
 class SharedLinkAuditMetaSerializationTests(TestCase):
 	"""Ensure public shared-link audit metadata never stores raw UUID values."""
 

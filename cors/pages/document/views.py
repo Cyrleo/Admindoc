@@ -220,7 +220,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
             meta={
                 "file_count": len(document_files),
                 "zip_name": zip_filename,
-                "document_id": document.pk,
+                "document_id": str(document.pk),
             },
         )
 
@@ -260,7 +260,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
             target_id=str(document_file.pk),
             meta={
                 "file_name": document_file.file_name,
-                "document_id": document_file.document.pk,
+                "document_id": str(document_file.document.pk),
             },
         )
 

@@ -4,12 +4,13 @@
 
 from django.contrib.auth.models import Group
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from cors.models import AuditLog, Document
+from cors.models import AuditLog, Document, DocumentFile
 from cors.pages.admin_api.permissions import (
 	ROLE_BILLING_ADMIN,
 	ROLE_OPS_ADMIN,
@@ -194,4 +195,35 @@ class CategoryAuditMetaSerializationTests(TestCase):
 		audit = AuditLog.objects.filter(action="created_category").latest("timestamp")
 		self.assertEqual(audit.meta.get("owner_id"), str(self.user.id))
 		self.assertIsInstance(audit.meta.get("owner_id"), str)
+
+
+class DocumentFileDownloadAuditMetaSerializationTests(TestCase):
+	"""Ensure UUID values in download audit meta are JSON serializable."""
+
+	def setUp(self):
+		self.client = APIClient()
+		self.user = User.objects.create_user(
+			email="download-owner@admindoc.test",
+			password="testpass123",
+		)
+		self.client.force_authenticate(user=self.user)
+
+		self.document = Document.objects.create(owner=self.user, title="Passport")
+		upload = SimpleUploadedFile("passport.txt", b"file-content", content_type="text/plain")
+		self.document_file = DocumentFile.objects.create(
+			document=self.document,
+			file=upload,
+			file_name="passport.txt",
+			mime_type="text/plain",
+			size=len(b"file-content"),
+		)
+
+	def test_download_file_audit_meta_document_id_is_string(self):
+		response = self.client.get(f"/api/documents/files/{self.document_file.id}/download/")
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		audit = AuditLog.objects.filter(action="download_document_file").latest("timestamp")
+		self.assertEqual(audit.meta.get("document_id"), str(self.document.id))
+		self.assertIsInstance(audit.meta.get("document_id"), str)
+
 

@@ -6,11 +6,14 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+from drf_spectacular.utils import extend_schema, OpenApiResponse
+from drf_spectacular.openapi import OpenApiTypes
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
 from cors.models import CloudStorageProvider, UserCloudStorage, CloudStorageActivity
+from cors.pages.cloud_storage.serializers import OAuthCallbackResponseSerializer, OAuthInitiateResponseSerializer
 from cors.storage.backends.google_drive import GoogleDriveBackend
 from cors.storage.backends.onedrive import OneDriveBackend
 from cors.storage.backends.dropbox import DropboxBackend
@@ -37,6 +40,7 @@ def _cleanup_old_states():
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@extend_schema(responses=OAuthInitiateResponseSerializer)
 def initiate_oauth(request):
     """
     Initie le flow OAuth pour un provider cloud.
@@ -107,6 +111,7 @@ def initiate_oauth(request):
 
 
 @api_view(['GET'])
+@extend_schema(responses=OAuthCallbackResponseSerializer)
 def oauth_callback_google(request):
     """
     Callback OAuth pour Google Drive.
@@ -219,6 +224,7 @@ def oauth_callback_google(request):
 
 
 @api_view(['GET'])
+@extend_schema(responses=OAuthCallbackResponseSerializer)
 def oauth_callback_onedrive(request):
     """
     Callback OAuth pour Microsoft OneDrive.
@@ -325,6 +331,7 @@ def oauth_callback_onedrive(request):
 
 
 @api_view(['GET'])
+@extend_schema(responses=OAuthCallbackResponseSerializer)
 def oauth_callback_dropbox(request):
     """
     Callback OAuth pour Dropbox.

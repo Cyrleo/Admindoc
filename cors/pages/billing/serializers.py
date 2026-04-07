@@ -6,3 +6,8 @@ class CheckoutSessionSerializer(serializers.Serializer):
     success_url = serializers.URLField()
     cancel_url = serializers.URLField()
     plan = serializers.CharField(required=False, allow_blank=True)
+
+
+class StripeWebhookResponseSerializer(serializers.Serializer):
+    received = serializers.BooleanField(required=False)
+    detail = serializers.CharField(required=False)

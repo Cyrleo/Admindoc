@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 from cors.models import CloudStorageProvider, UserCloudStorage, CloudStorageActivity, DocumentFile
 
 
@@ -31,7 +32,12 @@ class UserCloudStorageSerializer(serializers.ModelSerializer):
         write_only=True
     )
     available_space = serializers.SerializerMethodField()
-    
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_available_space(self, obj) -> int:
+        """Calcule l'espace disponible."""
+        return obj.available_space
+
     class Meta:
         model = UserCloudStorage
         fields = [
@@ -62,10 +68,6 @@ class UserCloudStorageSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-    
-    def get_available_space(self, obj):
-        """Calcule l'espace disponible."""
-        return obj.available_space
     
     def create(self, validated_data):
         # Ajouter l'utilisateur courant
@@ -158,3 +160,16 @@ class DocumentFileMoveSerializer(serializers.Serializer):
                     f"Cloud storage with ID {value} not found or inactive."
                 )
         return None
+
+
+class OAuthInitiateResponseSerializer(serializers.Serializer):
+    oauth_url = serializers.URLField()
+    state = serializers.CharField()
+    provider = serializers.JSONField()
+
+
+class OAuthCallbackResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField(required=False)
+    message = serializers.CharField(required=False)
+    storage = serializers.JSONField(required=False)
+    error = serializers.CharField(required=False)

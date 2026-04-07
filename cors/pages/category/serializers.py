@@ -12,3 +12,14 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = "__all__"
+    def validate(self, attrs):
+        request = self.context.get("request")
+        owner = request.user if request else None
+        name = attrs.get("name")
+
+        if Category.objects.filter(owner=owner, name__iexact=name).exists():
+            raise serializers.ValidationError({
+                "name": "Vous avez deja une categoie du meme nom"
+            })
+
+        return attrs

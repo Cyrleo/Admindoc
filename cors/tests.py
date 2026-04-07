@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from cors.models import Document
+from cors.models import AuditLog, Document
 from cors.pages.admin_api.permissions import (
 	ROLE_BILLING_ADMIN,
 	ROLE_OPS_ADMIN,
@@ -170,3 +170,28 @@ class AdminApiThrottleTests(TestCase):
 		self.assertEqual(first.status_code, status.HTTP_200_OK)
 		self.assertEqual(second.status_code, status.HTTP_200_OK)
 		self.assertEqual(third.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+class CategoryAuditMetaSerializationTests(TestCase):
+	"""Valide que les IDs UUID dans les meta d'audit sont serialisables JSON."""
+
+	def setUp(self):
+		self.client = APIClient()
+		self.user = User.objects.create_user(
+			email="category-owner@admindoc.test",
+			password="testpass123",
+		)
+		self.client.force_authenticate(user=self.user)
+
+	def test_create_category_audit_meta_owner_id_is_string(self):
+		response = self.client.post(
+			"/api/categories/",
+			{"name": "Factures", "icon": "folder"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+		audit = AuditLog.objects.filter(action="created_category").latest("timestamp")
+		self.assertEqual(audit.meta.get("owner_id"), str(self.user.id))
+		self.assertIsInstance(audit.meta.get("owner_id"), str)
+

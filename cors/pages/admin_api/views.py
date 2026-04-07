@@ -22,6 +22,8 @@ from rest_framework.response import Response
 from rest_framework.exceptions import Throttled
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, OpenApiResponse
+from drf_spectacular.openapi import OpenApiTypes
 
 from django.contrib.auth.models import Group
 
@@ -65,6 +67,9 @@ from cors.pages.admin_api.serializers import (
     AdminDocumentSerializer,
     AdminReminderLogSerializer,
     AdminReminderSerializer,
+    AdminSystemSettingsSerializer,
+    AdminJobResponseSerializer,
+    AdminIntegrationTestResponseSerializer,
     AdminSubscriptionSerializer,
     AdminUserSerializer,
 )
@@ -165,6 +170,7 @@ class AdminDashboardOverviewView(AdminThrottledAPIView):
     permission_classes = [IsDashboardAdmin]
     throttle_scope = "admin_default"
 
+    @extend_schema(responses=OpenApiResponse(response=OpenApiTypes.OBJECT))
     def get(self, request):
         now = timezone.now()
         last_30d = now - timedelta(days=30)
@@ -202,6 +208,7 @@ class AdminDashboardKpisView(AdminThrottledAPIView):
     permission_classes = [IsDashboardAdmin]
     throttle_scope = "admin_default"
 
+    @extend_schema(responses=OpenApiResponse(response=OpenApiTypes.OBJECT))
     def get(self, request):
         docs_by_month = (
             Document.objects.annotate(month=TruncMonth("created_at"))
@@ -227,6 +234,7 @@ class AdminDashboardHealthView(AdminThrottledAPIView):
     permission_classes = [IsDashboardAdmin]
     throttle_scope = "admin_default"
 
+    @extend_schema(responses=OpenApiResponse(response=OpenApiTypes.OBJECT))
     def get(self, request):
         payload = {
             "status": "ok",
@@ -246,6 +254,7 @@ class AdminDashboardActivityFeedView(AdminThrottledAPIView):
     permission_classes = [IsDashboardAdmin]
     throttle_scope = "admin_default"
 
+    @extend_schema(responses=AdminAuditLogSerializer(many=True))
     def get(self, request):
         logs = AuditLog.objects.select_related("user").order_by("-timestamp")[:50]
         return Response(AdminAuditLogSerializer(logs, many=True).data)
@@ -562,7 +571,9 @@ class AdminReminderLogViewSet(AdminThrottledViewSet, viewsets.ReadOnlyModelViewS
 class AdminJobsView(AdminThrottledAPIView):
     permission_classes = [IsReminderAdmin]
     throttle_scope = "admin_sensitive"
+    serializer_class = AdminJobResponseSerializer
 
+    @extend_schema(responses=OpenApiResponse(response=OpenApiTypes.OBJECT))
     def post(self, request):
         delay_fn = getattr(schedule_due_reminders_task, "delay", None)
         result = delay_fn() if callable(delay_fn) else schedule_due_reminders_task()
@@ -574,7 +585,9 @@ class AdminJobsView(AdminThrottledAPIView):
 class AdminJobStatusView(AdminThrottledAPIView):
     permission_classes = [IsReminderAdmin]
     throttle_scope = "admin_default"
+    serializer_class = AdminJobResponseSerializer
 
+    @extend_schema(responses=OpenApiResponse(response=OpenApiTypes.OBJECT))
     def get(self, request, task_id):
         try:
             from celery.result import AsyncResult
@@ -769,7 +782,9 @@ class AdminCloudActivityViewSet(AdminThrottledViewSet, viewsets.ReadOnlyModelVie
 class AdminSystemSettingsView(AdminThrottledAPIView):
     permission_classes = [IsSystemAdmin]
     throttle_scope = "admin_sensitive"
+    serializer_class = AdminSystemSettingsSerializer
 
+    @extend_schema(responses=OpenApiResponse(response=OpenApiTypes.OBJECT))
     def get(self, request):
         payload = {
             "debug": settings.DEBUG,
@@ -780,6 +795,7 @@ class AdminSystemSettingsView(AdminThrottledAPIView):
         }
         return Response(payload)
 
+    @extend_schema(responses=OpenApiResponse(response=OpenApiTypes.OBJECT))
     def patch(self, request):
         return Response(
             {
@@ -795,6 +811,7 @@ class AdminRolesView(AdminThrottledAPIView):
     permission_classes = [IsSystemAdmin]
     throttle_scope = "admin_default"
 
+    @extend_schema(responses=OpenApiResponse(response=OpenApiTypes.OBJECT))
     def get(self, request):
         return Response(
             {
@@ -807,7 +824,9 @@ class AdminRolesView(AdminThrottledAPIView):
 class AdminIntegrationTestView(AdminThrottledAPIView):
     permission_classes = [IsSystemAdmin]
     throttle_scope = "admin_integrations"
+    serializer_class = AdminIntegrationTestResponseSerializer
 
+    @extend_schema(responses=OpenApiResponse(response=OpenApiTypes.OBJECT))
     def post(self, request, name):
         _enforce_local_rate_limit(request, "admin_integrations", "admin_integrations")
 

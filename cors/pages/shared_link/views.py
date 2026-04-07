@@ -12,6 +12,10 @@ class SharedLinkViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        # Check if this is a swagger fake view for schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return SharedLink.objects.none()
+        
         return SharedLink.objects.filter(creator=self.request.user)
 
     def perform_create(self, serializer):

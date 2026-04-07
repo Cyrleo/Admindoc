@@ -144,6 +144,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
         return super().list(request, *args, **kwargs)
 
     def get_queryset(self):
+        # Check if this is a swagger fake view for schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Document.objects.none()
+        
         queryset = Document.objects.filter(owner=self.request.user)
 
         # Free text query alias for ILIKE-like matching on PostgreSQL.

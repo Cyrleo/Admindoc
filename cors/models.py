@@ -20,7 +20,7 @@ class Category(models.Model):
         blank=True,
         related_name="categories",
     )
-    name = models.CharField(max_length=150)
+    name = models.CharField(max_length=150, unique=True)
     icon = models.CharField(max_length=64, blank=True, help_text="Optional icon name")
     is_default = models.BooleanField(
         default=False,

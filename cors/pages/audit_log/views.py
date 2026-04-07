@@ -9,6 +9,10 @@ class AuditLogViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        # Check if this is a swagger fake view for schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return AuditLog.objects.none()
+        
         return AuditLog.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):

@@ -1,5 +1,6 @@
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
+from uuid import UUID
 
 from cors.models import AuditLog, Category, Document, Reminder, SharedLink, Tag
 from cors.request_context import get_current_user
@@ -15,6 +16,11 @@ def _get_actor():
 
 
 def _build_meta(instance):
+    def _json_safe(value):
+        if isinstance(value, UUID):
+            return str(value)
+        return value
+
     meta = {}
     for field_name in ("name", "title", "token"):
         if hasattr(instance, field_name):
@@ -22,11 +28,11 @@ def _build_meta(instance):
             if value is not None:
                 meta[field_name] = str(value)
     if hasattr(instance, "document_id"):
-        meta["document_id"] = instance.document_id
+        meta["document_id"] = _json_safe(instance.document_id)
     if hasattr(instance, "creator_id"):
-        meta["creator_id"] = instance.creator_id
+        meta["creator_id"] = _json_safe(instance.creator_id)
     if hasattr(instance, "owner_id"):
-        meta["owner_id"] = instance.owner_id
+        meta["owner_id"] = _json_safe(instance.owner_id)
     return meta
 
 

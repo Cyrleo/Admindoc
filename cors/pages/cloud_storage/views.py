@@ -2,9 +2,12 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
+from drf_spectacular.types import OpenApiTypes
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.utils import timezone
+from typing import BinaryIO, cast
 
 from cors.models import CloudStorageProvider, UserCloudStorage, CloudStorageActivity, DocumentFile
 from cors.pages.cloud_storage.serializers import (
@@ -54,6 +57,10 @@ class UserCloudStorageViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Filtre les connexions de l'utilisateur courant."""
+        # Check if this is a swagger fake view for schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return UserCloudStorage.objects.none()
+        
         return UserCloudStorage.objects.filter(
             user=self.request.user
         ).select_related('provider')
@@ -232,6 +239,10 @@ class CloudStorageActivityViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         """Filtre les activités de l'utilisateur courant."""
+        # Check if this is a swagger fake view for schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return CloudStorageActivity.objects.none()
+        
         return CloudStorageActivity.objects.filter(
             user_storage__user=self.request.user
         ).select_related('user_storage', 'document_file').order_by('-timestamp')
@@ -246,8 +257,20 @@ class DocumentFileCloudViewSet(viewsets.ViewSet):
     - move_to_local: Rapatrie un fichier cloud en local
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = DocumentFileMoveSerializer
     
     @action(detail=False, methods=['post'], url_path='move-to-cloud/(?P<file_id>[^/.]+)')
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="file_id",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description="UUID of the document file to move",
+            )
+        ],
+        responses=OpenApiResponse(response=OpenApiTypes.OBJECT),
+    )
     def move_to_cloud(self, request, file_id=None):
         """
         Déplace un fichier local vers un cloud storage.
@@ -295,15 +318,21 @@ class DocumentFileCloudViewSet(viewsets.ViewSet):
                 document_file.save()
                 
                 # Lancer la tâche asynchrone
-                task = upload_file_to_cloud_task.delay(
+                delay_fn = getattr(upload_file_to_cloud_task, "delay", None)
+                task = delay_fn(
                     document_file_id=document_file.id,
                     user_storage_id=target_storage.id,
-                    folder_path=folder_path
+                    folder_path=folder_path,
+                ) if callable(delay_fn) else upload_file_to_cloud_task(
+                    document_file_id=document_file.id,
+                    user_storage_id=target_storage.id,
+                    folder_path=folder_path,
                 )
+                task_id = getattr(task, "id", None)
                 
                 return Response({
                     'message': 'Cloud upload started asynchronously',
-                    'task_id': task.id,
+                    'task_id': task_id,
                     'file': {
                         'id': document_file.id,
                         'sync_status': 'uploading',
@@ -337,7 +366,7 @@ class DocumentFileCloudViewSet(viewsets.ViewSet):
             path = f"{target_storage.base_folder}{category_name}/"
             
             # Upload
-            with document_file.file.open('rb') as f:
+            with cast(BinaryIO, document_file.file.open('rb')) as f:
                 result = backend.upload_file(
                     file=f,
                     path=path,
@@ -393,6 +422,17 @@ class DocumentFileCloudViewSet(viewsets.ViewSet):
             )
     
     @action(detail=False, methods=['post'], url_path='move-to-local/(?P<file_id>[^/.]+)')
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="file_id",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description="UUID of the document file to move",
+            )
+        ],
+        responses=OpenApiResponse(response=OpenApiTypes.OBJECT),
+    )
     def move_to_local(self, request, file_id=None):
         """
         Rapatrie un fichier cloud en local.

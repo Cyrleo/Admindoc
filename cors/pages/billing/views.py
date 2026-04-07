@@ -4,20 +4,24 @@ from typing import Any, cast
 
 import stripe
 from django.utils.dateparse import parse_datetime
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiResponse
+from drf_spectacular.openapi import OpenApiTypes
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from stripe import SignatureVerificationError
 
 from cors.models import Subscription
-from .serializers import CheckoutSessionSerializer
+from .serializers import CheckoutSessionSerializer, StripeWebhookResponseSerializer
 
 
 class CreateCheckoutSessionView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    @extend_schema(request=CheckoutSessionSerializer)
+    @extend_schema(
+        request=CheckoutSessionSerializer,
+        responses=OpenApiResponse(response=OpenApiTypes.OBJECT)
+    )
     def post(self, request):
         serializer = CheckoutSessionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -63,7 +67,9 @@ class CreateCheckoutSessionView(APIView):
 class StripeWebhookView(APIView):
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
+    serializer_class = StripeWebhookResponseSerializer
 
+    @extend_schema(responses=OpenApiResponse(response=OpenApiTypes.OBJECT))
     def post(self, request):
         secret_key = os.getenv("STRIPE_SECRET_KEY", "")
         webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "")

@@ -7,8 +7,11 @@ Ces serializers exposent des vues metier orientees back-office:
 - champs sensibles verrouilles en lecture seule quand necessaire
 """
 
+from typing import List
+
 from accounts.models import User
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 
 from cors.pages.admin_api.permissions import ADMIN_ROLE_NAMES
 
@@ -35,7 +38,8 @@ class AdminUserSerializer(serializers.ModelSerializer):
 
     admin_roles = serializers.SerializerMethodField()
 
-    def get_admin_roles(self, obj):
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_admin_roles(self, obj) -> List[str]:
         # Un utilisateur peut cumuler plusieurs roles admin.
         names = obj.groups.values_list("name", flat=True)
         return sorted([name for name in names if name in ADMIN_ROLE_NAMES])
@@ -250,3 +254,24 @@ class AdminDocumentFileSerializer(serializers.ModelSerializer):
             "sync_status",
             "uploaded_at",
         ]
+
+
+class AdminSystemSettingsSerializer(serializers.Serializer):
+    debug = serializers.BooleanField()
+    allowed_hosts = serializers.ListField(child=serializers.CharField())
+    page_size = serializers.IntegerField(allow_null=True)
+    cloud_storage_enabled = serializers.BooleanField()
+    email_backend = serializers.CharField()
+
+
+class AdminJobResponseSerializer(serializers.Serializer):
+    task_id = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    status = serializers.CharField()
+    state = serializers.CharField(required=False)
+    result = serializers.JSONField(required=False)
+    detail = serializers.CharField(required=False)
+
+
+class AdminIntegrationTestResponseSerializer(serializers.Serializer):
+    integration = serializers.CharField()
+    configured = serializers.BooleanField()

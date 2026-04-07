@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from rest_framework.reverse import reverse
+from drf_spectacular.utils import extend_schema_field
+from django.urls import NoReverseMatch
 
 from cors.models import Category, Document, DocumentFile, Tag
 
@@ -8,9 +10,13 @@ class DocumentFileSerializer(serializers.ModelSerializer):
     """Serializer for individual document files."""
     download_url = serializers.SerializerMethodField()
 
-    def get_download_url(self, obj):
+    @extend_schema_field(serializers.URLField())
+    def get_download_url(self, obj) -> str:
         request = self.context.get("request")
-        return reverse("document-download-file", kwargs={"file_id": obj.pk}, request=request)
+        try:
+            return reverse("document-download-file", kwargs={"file_id": obj.pk}, request=request)
+        except NoReverseMatch:
+            return ""
     
     class Meta:
         model = DocumentFile
@@ -34,9 +40,13 @@ class DocumentSerializer(serializers.ModelSerializer):
     files = DocumentFileSerializer(many=True, read_only=True)
     download_url = serializers.SerializerMethodField()
 
-    def get_download_url(self, obj):
+    @extend_schema_field(serializers.URLField())
+    def get_download_url(self, obj) -> str:
         request = self.context.get("request")
-        return reverse("document-download", kwargs={"pk": obj.pk}, request=request)
+        try:
+            return reverse("document-download", kwargs={"pk": obj.pk}, request=request)
+        except NoReverseMatch:
+            return ""
 
     class Meta:
         model = Document
@@ -110,37 +120,40 @@ class DocumentLocalUploadSerializer(serializers.ModelSerializer):
         return files
 
     def create(self, validated_data):
+        from django.db import transaction
+
         tags = validated_data.pop("tags", [])
         uploaded_files = validated_data.pop("files")
         request = self.context["request"]
 
-        # Use first file's name as default title if not provided
-        if not validated_data.get("title"):
-            validated_data["title"] = uploaded_files[0].name
+        with transaction.atomic():
+            # Use first file's name as default title if not provided
+            if not validated_data.get("title"):
+                validated_data["title"] = uploaded_files[0].name
 
-        validated_data["owner"] = request.user
-        
-        # Remove old deprecated fields from creation
-        validated_data.pop("file", None)
-        validated_data.pop("file_name", None)
-        validated_data.pop("mime_type", None)
-        validated_data.pop("size", None)
+            validated_data["owner"] = request.user
+            
+            # Remove old deprecated fields from creation
+            validated_data.pop("file", None)
+            validated_data.pop("file_name", None)
+            validated_data.pop("mime_type", None)
+            validated_data.pop("size", None)
 
-        # Create the document
-        document = Document.objects.create(**validated_data)
-        
-        if tags:
-            document.tags.set(tags)
-        
-        # Create DocumentFile entries for each uploaded file
-        for index, uploaded_file in enumerate(uploaded_files):
-            DocumentFile.objects.create(
-                document=document,
-                file=uploaded_file,
-                file_name=uploaded_file.name,
-                mime_type=getattr(uploaded_file, "content_type", "") or "",
-                size=uploaded_file.size,
-                is_primary=(index == 0),  # First file is primary
-            )
-        
-        return document
+            # Create the document
+            document = Document.objects.create(**validated_data)
+            
+            if tags:
+                document.tags.set(tags)
+            
+            # Create DocumentFile entries for each uploaded file
+            for index, uploaded_file in enumerate(uploaded_files):
+                DocumentFile.objects.create(
+                    document=document,
+                    file=uploaded_file,
+                    file_name=uploaded_file.name,
+                    mime_type=getattr(uploaded_file, "content_type", "") or "",
+                    size=uploaded_file.size,
+                    is_primary=(index == 0),  # First file is primary
+                )
+            
+            return document

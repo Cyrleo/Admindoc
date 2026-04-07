@@ -1,9 +1,9 @@
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
-from uuid import UUID
 
 from cors.models import AuditLog, Category, Document, Reminder, SharedLink, Tag
 from cors.request_context import get_current_user
+from cors.utils.audit import make_json_safe
 
 TRACKED_MODELS = (Category, Tag, Document, Reminder, SharedLink)
 
@@ -16,11 +16,6 @@ def _get_actor():
 
 
 def _build_meta(instance):
-    def _json_safe(value):
-        if isinstance(value, UUID):
-            return str(value)
-        return value
-
     meta = {}
     for field_name in ("name", "title", "token"):
         if hasattr(instance, field_name):
@@ -28,11 +23,11 @@ def _build_meta(instance):
             if value is not None:
                 meta[field_name] = str(value)
     if hasattr(instance, "document_id"):
-        meta["document_id"] = _json_safe(instance.document_id)
+        meta["document_id"] = make_json_safe(instance.document_id)
     if hasattr(instance, "creator_id"):
-        meta["creator_id"] = _json_safe(instance.creator_id)
+        meta["creator_id"] = make_json_safe(instance.creator_id)
     if hasattr(instance, "owner_id"):
-        meta["owner_id"] = _json_safe(instance.owner_id)
+        meta["owner_id"] = make_json_safe(instance.owner_id)
     return meta
 
 
@@ -42,7 +37,7 @@ def _log(action, instance):
         action=action,
         target_type=instance.__class__.__name__,
         target_id=str(instance.pk),
-        meta=_build_meta(instance),
+        meta=make_json_safe(_build_meta(instance)),
     )
 
 

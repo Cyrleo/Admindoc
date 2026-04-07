@@ -10,12 +10,13 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from cors.models import AuditLog, Document, DocumentFile
+from cors.models import AuditLog, Document, DocumentFile, SharedLink
 from cors.pages.admin_api.permissions import (
 	ROLE_BILLING_ADMIN,
 	ROLE_OPS_ADMIN,
 	ROLE_SUPPORT_ADMIN,
 )
+from cors.utils.audit import make_json_safe
 
 
 class AdminApiRBACTests(TestCase):
@@ -225,5 +226,48 @@ class DocumentFileDownloadAuditMetaSerializationTests(TestCase):
 		audit = AuditLog.objects.filter(action="download_document_file").latest("timestamp")
 		self.assertEqual(audit.meta.get("document_id"), str(self.document.id))
 		self.assertIsInstance(audit.meta.get("document_id"), str)
+
+
+class SharedLinkAuditMetaSerializationTests(TestCase):
+	"""Ensure public shared-link audit metadata never stores raw UUID values."""
+
+	def setUp(self):
+		self.client = APIClient()
+		self.owner = User.objects.create_user(
+			email="shared-owner@admindoc.test",
+			password="testpass123",
+		)
+		upload = SimpleUploadedFile("shared.txt", b"shared-file", content_type="text/plain")
+		self.document = Document.objects.create(owner=self.owner, title="Shared Doc", file=upload)
+		self.shared_link = SharedLink.objects.create(document=self.document, creator=self.owner)
+
+	def test_public_download_logs_json_safe_document_id(self):
+		response = self.client.get(f"/share/{self.shared_link.token}/")
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		audit = AuditLog.objects.filter(action="download_shared_link").latest("timestamp")
+		self.assertEqual(audit.meta.get("document_id"), str(self.document.id))
+		self.assertIsInstance(audit.meta.get("document_id"), str)
+
+
+class AuditJsonSafeUtilityTests(TestCase):
+	"""Validate recursive UUID normalization for audit metadata payloads."""
+
+	def test_make_json_safe_converts_nested_uuids(self):
+		user = User.objects.create_user(
+			email="json-safe@admindoc.test",
+			password="testpass123",
+		)
+		document = Document.objects.create(owner=user, title="Nested UUID")
+		payload = {
+			"document_id": document.id,
+			"items": [document.id, {"owner_id": user.id}],
+		}
+
+		normalized = make_json_safe(payload)
+
+		self.assertEqual(normalized["document_id"], str(document.id))
+		self.assertEqual(normalized["items"][0], str(document.id))
+		self.assertEqual(normalized["items"][1]["owner_id"], str(user.id))
 
 

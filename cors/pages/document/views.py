@@ -18,6 +18,7 @@ from .filters import DocumentFilter
 from .serializers import DocumentLocalUploadSerializer, DocumentSerializer
 from cors.storage.factory import CloudStorageFactory
 from cors.storage.token_manager import TokenManager
+from cors.utils.audit import make_json_safe
 
 
 def _download_name(value, fallback):
@@ -217,11 +218,11 @@ class DocumentViewSet(viewsets.ModelViewSet):
             action="download_document_zip",
             target_type="Document",
             target_id=str(document.pk),
-            meta={
+            meta=make_json_safe({
                 "file_count": len(document_files),
                 "zip_name": zip_filename,
-                "document_id": str(document.pk),
-            },
+                "document_id": document.pk,
+            }),
         )
 
         response = FileResponse(zip_buffer, as_attachment=True, filename=zip_filename)
@@ -258,10 +259,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
             action="download_document_file",
             target_type="DocumentFile",
             target_id=str(document_file.pk),
-            meta={
+            meta=make_json_safe({
                 "file_name": document_file.file_name,
-                "document_id": str(document_file.document.pk),
-            },
+                "document_id": document_file.document.pk,
+            }),
         )
 
         file_name = _download_name(document_file.file_name, document_file.file.name)

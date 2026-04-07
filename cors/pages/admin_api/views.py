@@ -74,6 +74,7 @@ from cors.pages.admin_api.serializers import (
     AdminUserSerializer,
 )
 from cors.tasks import enqueue_reminder_email, export_audit_logs_task, schedule_due_reminders_task
+from cors.utils.audit import make_json_safe
 
 
 def _parse_bool(value, default=False):
@@ -94,6 +95,7 @@ def _audit_admin_action(request, action, target_type, target_id, meta=None):
     }
     payload = dict(meta or {})
     payload.update({"request": request_meta})
+    payload = make_json_safe(payload)
 
     AuditLog.objects.create(
         user=request.user,

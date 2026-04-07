@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from cors.models import AuditLog, SharedLink
+from cors.utils.audit import make_json_safe
 from .serializers import SharedLinkSerializer
 
 
@@ -71,11 +72,11 @@ class PublicSharedLinkView(APIView):
             action="download_shared_link",
             target_type="SharedLink",
             target_id=str(shared_link.pk),
-            meta={
+            meta=make_json_safe({
                 "document_id": document.pk,
                 "download_count": shared_link.download_count,
                 "token": str(shared_link.token),
-            },
+            }),
         )
 
         return Response(
